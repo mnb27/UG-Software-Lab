@@ -11,35 +11,35 @@ using namespace std;
 #define readData std::ios::in
 #define appendData std::ios::out | std::ios::app
 
-#define cellSizeK 15000 // Each cell is of fixed size K*K
-#define entries 15000 // B - number of entries (distinct nodes or edges) allowed in each disk block
- 
+// Graph Data markers
 string edgeWithinCell = "##";
 string boundaryNodes = "**";
 string overflowMarker = "??";
 string boundaryEgdes = "%%";
 
+int cellSizeK = 15000; // Each cell is of fixed size K*K
+int entries = 15000; // B - number of entries (distinct nodes or edges) allowed in each disk block
+
 // a map from node id → x and y coordinate
-map<int, nodeCoor> nodeid_to_cords;
+map<int, nodeCoor> nodeCoorMap;
 
 // a map between the cell ids and the file names corresponding to their disk blocks
-map<ppi, set<string>> cellid_to_filenames;
+map<ppi, set<string>> CellIDFilenamesMap; // cell(x,y) --> disk blocks.txt
 
-vector<vector<int>> adj;
-map<ppi, double> edgeWt;
+vector<vector<int>> adj; // adjacency list for storing graph network
+map<ppi, vector<double>> edgeWt; // mutiple egdes {a->b} maps to edge weight
 double X_MIN = DBL_MAX, X_MAX = DBL_MIN, Y_MIN = DBL_MAX, Y_MAX = DBL_MIN;
-
 
 // Determine the appropriate cell id given an x and y coordinates
 ppi getCell_id_fromXY(double x, double y) {
-  int cell_x = (x - X_MIN) / cellSizeK;
-  int cell_y = (y - Y_MIN) / cellSizeK;
-  return make_pair(cell_x, cell_y);
+  int i = (x - X_MIN) / cellSizeK;
+  int j = (y - Y_MIN) / cellSizeK;
+  return make_pair(i, j);
 }
 
-ppi getCell_id_fromNodeID(int node_id) {
-  // Returns id of cell corresponding to a node (node_id)
-  pair<double, double> coor = nodeid_to_cords[node_id];
+ppi getCell_id_fromNodeID(int nodeID) {
+  // Returns id of cell corresponding to a node (nodeID)
+  pair<double, double> coor = nodeCoorMap[nodeID];
   return getCell_id_fromXY(coor.first, coor.second);
 }
 
@@ -58,18 +58,17 @@ string getFileName(int x, int y, int num) {
 }
 
 // Utility function to handle file write for conditions of overflow
-void overflowHandler(int &count, int &filecount, std::ofstream &file, int cellX, int cellY) {
-  if (count < entries) return; 
-  count = 0;
-  string overflowFileName = getFileName(cellX, cellY, filecount + 1);
+void overflowHandler(int &entriesCount, int &fileIndex, std::ofstream &file, int cellX, int cellY) {
+  if (entriesCount < entries) return; 
+  entriesCount = 0;
+  string overflowFileName = getFileName(cellX, cellY, fileIndex + 1);
   file << overflowMarker << " " << overflowFileName << endl;
   file.close();
 
   file.open(overflowFileName, appendData);
-  // string mainBlockFileName = getFileName(cellX, cellY, filecount);
-  file << overflowMarker << " " << getFileName(cellX, cellY, filecount) << endl;
-  filecount++;
-  cellid_to_filenames[make_pair(cellX, cellY)].insert(overflowFileName);
+  file << overflowMarker << " " << getFileName(cellX, cellY, fileIndex) << endl;
+  fileIndex++;
+  CellIDFilenamesMap[make_pair(cellX, cellY)].insert(overflowFileName);
   return;
 }
 
@@ -80,17 +79,15 @@ void makeDiskBlocks(int x, int y, vector<int> nodes) {
   ofstream fileHandle(filename, appendData);
   if ((int)nodes.size() == 0) return;
 
-  int count = 0;
-  int filecount = 0;
+  int entriesCount = 0;
+  int fileIndex = 0;
   sort(nodes.begin(), nodes.end());
 
-  // NODES INSIDE CELL X Y
+  // NODES INSIDE CELL X entriesCount
   for (int id : nodes) {
-    fileHandle << id << " " << nodeid_to_cords[id].first << " " << nodeid_to_cords[id].second << endl;
-    count++;
-    //    cout<<"Before Count - "<<count<<endl;
-    overflowHandler(count, filecount, fileHandle, x, y);
-    //    cout<<"After Count - "<<count<<endl;
+    fileHandle << id << " " << nodeCoorMap[id].first << " " << nodeCoorMap[id].second << endl;
+    entriesCount++;
+    overflowHandler(entriesCount, fileIndex, fileHandle, x, y);
   }
 
   // EDGES INSIDE CELL X Y
@@ -102,9 +99,11 @@ void makeDiskBlocks(int x, int y, vector<int> nodes) {
   for (int id : nodes) {
     for (int child : adj[id]) {
       if (nodesSet.count(child)) {
-        fileHandle << id << " " << child << " " << edgeWt[ {id, child}] << endl;
-        count++;
-        overflowHandler(count, filecount, fileHandle, x, y);
+        for(double weight : edgeWt[{id, child}]) {
+            fileHandle << id << " " << child << " " << weight << endl;
+            entriesCount++;
+            overflowHandler(entriesCount, fileIndex, fileHandle, x, y);
+        }
       }
     }
   }
@@ -116,9 +115,9 @@ void makeDiskBlocks(int x, int y, vector<int> nodes) {
     for (int child : adj[id]) {
       if (!nodesSet.count(child)) {
         out_of_bound.insert(child);
-        fileHandle << child << " " << nodeid_to_cords[child].first << " " << nodeid_to_cords[child].second << endl;
-        count++;
-        overflowHandler(count, filecount, fileHandle, x, y);
+        fileHandle << child << " " << nodeCoorMap[child].first << " " << nodeCoorMap[child].second << endl;
+        entriesCount++;
+        overflowHandler(entriesCount, fileIndex, fileHandle, x, y);
       }
     }
   }
@@ -129,26 +128,30 @@ void makeDiskBlocks(int x, int y, vector<int> nodes) {
   for (int id : nodes) {
     for (int child : adj[id]) {
       if (out_of_bound.count(child)) {
-        fileHandle << id << " " << child << " " << edgeWt[ {id, child}] << endl;
-        count++;
-        overflowHandler(count, filecount, fileHandle, x, y);
+        for(double weight : edgeWt[{id, child}]) {
+            fileHandle << id << " " << child << " " << weight << endl;
+            entriesCount++;
+            overflowHandler(entriesCount, fileIndex, fileHandle, x, y);
+        }
       }
     }
   }
   // out to in directed edges
   for (int A : out_of_bound) {
     for (int B : adj[A]) {
-      fileHandle << A << " " << B << " " << edgeWt[ {A, B}] << endl;
-      count++;
-      overflowHandler(count, filecount, fileHandle, x, y);
+      for(double weight : edgeWt[{A,B}]) {
+        fileHandle << A << " " << B << " " << weight << endl;
+        entriesCount++;
+        overflowHandler(entriesCount, fileIndex, fileHandle, x, y);
+      }
     }
   }
   fileHandle.close();
 }
 
-void print_all_files_generated() {
+void getDiskFileNames() {
   // A function to print all generated files for quick inspection
-  for (auto mp : cellid_to_filenames) {
+  for (auto mp : CellIDFilenamesMap) {
     std::cout << "In Cell (" << mp.first.first << "," << mp.first.second << ") --> ";
     for (string names : mp.second) {
       std::cout << names << "   ";
@@ -158,16 +161,17 @@ void print_all_files_generated() {
 }
 
 // function which would print the disk block (and its associated overflow block) contents of any given node id in "visualizer.txt"
-void visualizer(int node_id) {
-  ppi cell_id = getCell_id_fromNodeID(node_id);
+void visualizer(int nodeID) {
+  ppi cell_id = getCell_id_fromNodeID(nodeID);
   int x = cell_id.first, y = cell_id.second;
-  std::cout << "Visualizing - node " << node_id << " in cell (" << x << "," << y << ")" << endl;
+  std::cout << "Visualizing - node " << nodeID << " in cell (" << x << "," << y << ")" << endl;
   vector<string> fileNames;
-  for (string name : cellid_to_filenames[ {x, y}]) {
+  for (string name : CellIDFilenamesMap[ {x, y}]) {
     fileNames.push_back(name);
   }
   sort(fileNames.begin(), fileNames.end());
-  for (auto x : fileNames) std::cout << "Related files - " << x << " ";
+  cout<<"Related disk block files for given node are - ";
+  for (auto x : fileNames) std::cout << x << " ";
 
   ofstream visualizerFile("Visualizer.txt", appendData);
   for (string file : fileNames) {
@@ -182,15 +186,28 @@ void visualizer(int node_id) {
 }
 
 vector<string> stringTokenizer(string &str) {
-  stringstream check1(str);
+  stringstream lineStream(str);
   vector<string> res;
-  string intermediate;
-  while (getline(check1, intermediate, ' '))
-    res.push_back(intermediate);
+  string part;
+  while (getline(lineStream, part, ' '))
+    res.push_back(part);
   return res;
 }
 
 int main() {
+
+  char option;
+  cout<<"Want to give custom input(y) or continue with default values(n) ? --> ";
+  cin>>option;
+  cout<<endl;
+  int cellSize, entriesLimit;
+  if(option=='y') {
+     cout<< "Input cell size (k) : ";     cin>>cellSize;      cout<<endl;
+     cout << "Input entries limit for disk blocks (B) : "; cin>>entriesLimit; cout<<endl;
+     cellSizeK = cellSize;
+     entries = entriesLimit;
+  }
+
   ifstream edgeInfo("Dataset/edges.txt");
   ifstream nodesInfo("Dataset/nodes.txt");
 
@@ -208,7 +225,7 @@ int main() {
     if (Y_MIN > nodeY) Y_MIN = nodeY;
     if (Y_MAX < nodeY) Y_MAX = nodeY;
     // creating node coordinates map
-    nodeid_to_cords[nodeID] = make_pair(nodeX, nodeY);
+    nodeCoorMap[nodeID] = make_pair(nodeX, nodeY);
     split.clear();
     line = "";
   }
@@ -220,11 +237,11 @@ int main() {
   Y_MAX += (cellSizeK - (height % cellSizeK)) % cellSizeK;
 
 
-  std::cout << "Rectangle: ";
+  std::cout << "GRID : ";
   std::cout.precision(20);
   std::cout << "X_MIN: " << X_MIN << " " << "X_MAX: " << X_MAX << " " << "Y_MIN :" << Y_MIN << " " << "Y_MAX" << Y_MAX << endl;
 
-  int nodesCount = nodeid_to_cords.size();
+  int nodesCount = nodeCoorMap.size();
   adj.resize(nodesCount);
 
   // Creating edge map
@@ -234,13 +251,13 @@ int main() {
     int nodeB = stoi(split[1]);
     double weight = stod(split[2]);
     adj[nodeA].push_back(nodeB);
-    edgeWt[ {nodeA, nodeB}] = weight;
+    edgeWt[ {nodeA, nodeB}].push_back(weight);
   }
 
   int x = 0, y = 0;
   map<ppi, vector<int>> node_data;
 
-  for (auto idd : nodeid_to_cords) {
+  for (auto idd : nodeCoorMap) {
     int ID = idd.first;
     ppi cell_id = getCell_id_fromNodeID(ID);
     node_data[ {cell_id.first, cell_id.second}].push_back(ID);
@@ -256,8 +273,8 @@ int main() {
     }
     if (node_data.count({x, y})) {
       string filename = getFileName(x, y, 0);
-      cellid_to_filenames[ {x, y}].clear();
-      cellid_to_filenames[ {x, y}].insert(filename);
+      CellIDFilenamesMap[ {x, y}].clear();
+      CellIDFilenamesMap[ {x, y}].insert(filename);
       // cout<< "block - " <<x <<" "<<y <<" " << node_data[{x,y}].size() <<endl;
       makeDiskBlocks(x, y, node_data[ {x, y}]);
     }
@@ -265,6 +282,9 @@ int main() {
     count++;
   }
   std::cout<<count<<endl;
-  // print_all_files_generated();
+  // getDiskFileNames();
   visualizer(700);
+
+  edgeInfo.close();
+  nodesInfo.close();
 }

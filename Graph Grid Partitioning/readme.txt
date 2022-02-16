@@ -5,14 +5,13 @@
 On g++ compiler use below commands.
 $ g++ partitionGraph.cpp
 $ ./a
+now input values accordingly
 
 NOTE : 
-1. One can change the value of 'cellSize' and 'B' [These variables are defined at the top of the code under macro statements as shown below]
-#define cellSize 10000 // cellsize=k for each k * k cell
-#define entries 10000 // B
+1. One can input the value of 'cellSize(k)' and 'number of entries (B)'
 2. In the grid, cell ids are taken as (i,j) pair like we have in 2d array. [row, column]
 3. Disk blocks are names as "Cell(id)_Block.txt" and overflow files as "Cell(id)_OverflowBlock1.txt", "Cell(id)_OverflowBlock2.txt" etc...
-4. No external library is used in the code, only primitive data types are used like vector array, string, file I/O.
+4. No external library is used in the code, only primitive data types are used like vector array, maps, string, file I/O.
 
 STEPS INVOVED :
 1. Computing X_min, X_max, Y_min, Y_max from the dataset
