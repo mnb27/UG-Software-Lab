@@ -23,3 +23,8 @@ IMPLEMENTED :
 2. Function to determine the appropriate cell id given an x and y coordinates
 3. A map between the cell ids and the file names corresponding to their disk blocks
 4. Visualizer function which would print the disk block (and its associated overflow block) contents of any given node id in "visualizer.txt"
+
+
+Not printing empty files
+handle double value of k - maybe scale node coordinates
+boundry edges not getting printed

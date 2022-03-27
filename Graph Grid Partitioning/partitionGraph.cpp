@@ -17,8 +17,8 @@ string boundaryNodes = "**";
 string overflowMarker = "??";
 string boundaryEgdes = "%%";
 
-int cellSizeK = 15000; // Each cell is of fixed size K*K
-int entries = 15000; // B - number of entries (distinct nodes or edges) allowed in each disk block
+int cellSizeK = 12000; // Each cell is of fixed size K*K
+int entries = 12000; // B - number of entries (distinct nodes or edges) allowed in each disk block
 
 // a map from node id → x and y coordinate
 map<int, nodeCoor> nodeCoorMap;
@@ -27,6 +27,7 @@ map<int, nodeCoor> nodeCoorMap;
 map<ppi, set<string>> CellIDFilenamesMap; // cell(x,y) --> disk blocks.txt
 
 vector<vector<int>> adj; // adjacency list for storing graph network
+// vector<int> adj[1000];
 map<ppi, vector<double>> edgeWt; // mutiple egdes {a->b} maps to edge weight
 double X_MIN = DBL_MAX, X_MAX = DBL_MIN, Y_MIN = DBL_MAX, Y_MAX = DBL_MIN;
 
@@ -200,11 +201,12 @@ int main() {
   cout<<"Want to give custom input(y) or continue with default values(n) ? --> ";
   cin>>option;
   cout<<endl;
-  int cellSize, entriesLimit;
+  double cellSize;
+  int entriesLimit;
   if(option=='y') {
      cout<< "Input cell size (k) : ";     cin>>cellSize;      cout<<endl;
      cout << "Input entries limit for disk blocks (B) : "; cin>>entriesLimit; cout<<endl;
-     cellSizeK = cellSize;
+     cellSizeK = ceil(cellSize);
      entries = entriesLimit;
   }
 
@@ -236,12 +238,11 @@ int main() {
   X_MAX += (cellSizeK - (width % cellSizeK)) % cellSizeK;
   Y_MAX += (cellSizeK - (height % cellSizeK)) % cellSizeK;
 
-
   std::cout << "GRID : ";
   std::cout.precision(20);
-  std::cout << "X_MIN: " << X_MIN << " " << "X_MAX: " << X_MAX << " " << "Y_MIN :" << Y_MIN << " " << "Y_MAX" << Y_MAX << endl;
+  std::cout << "X_MIN: " << X_MIN << " " << "X_MAX: " << X_MAX << " " << "Y_MIN :" << Y_MIN << " " << "Y_MAX :" << Y_MAX << endl;
 
-  int nodesCount = nodeCoorMap.size();
+  int nodesCount = nodeCoorMap.size() + 10;
   adj.resize(nodesCount);
 
   // Creating edge map
@@ -281,9 +282,9 @@ int main() {
     x++;
     count++;
   }
-  std::cout<<count<<endl;
+  // std::cout<<count<<endl;
   // getDiskFileNames();
-  visualizer(700);
+  visualizer(12345);
 
   edgeInfo.close();
   nodesInfo.close();
